@@ -8,6 +8,8 @@ class Graph:
         self.graph = defaultdict(list)
         self.heuristic = {}  # -> A* and  informed search algorithms
         self.weights = {}    # -> weighted edges
+        self.and_nodes = set()  # -> For AO* algorithm
+        self.or_nodes = set() # -> For AO* algorithm
 
     def add_edge(self, u: str, v: str, weight: int = 1):
         self.graph[u].append(v)
@@ -159,10 +161,78 @@ class Graph:
                         #print(f"  New Cost to '{neighbor}': {new_cost}, Heuristic: {self.heuristic.get(neighbor, 0)}, Total Estimate: {estimate}")
                         heapq.heappush(queue, (estimate, new_cost, neighbor, path + [neighbor]))
         return []
+    
+    def ao_star(self, start: str, goal: str) -> List[str]:
+        """AO* Search Algorithm"""
+        def calculate_cost(node: str, visited: Set[str]) -> Tuple[float, List[str]]:
+            if node == goal:
+                return 0, [node]
+            if node in visited:
+                return float('inf'), []
+            
+            visited.add(node)
+            
+            if node in self.and_nodes:
+                ##All children must be visited (AND node)
+                total_cost = 0
+                total_path = [node]
+                for neighbor in self.graph[node]:
+                    cost, path = calculate_cost(neighbor, visited.copy())
+                    total_cost += cost + self.weights.get((node, neighbor), 1)
+                    total_path.extend(path)
+                return total_cost, total_path
+            else:
+                ##Choose the best child (OR node)
+                min_cost = float('inf')
+                best_path = []
+                for neighbor in self.graph[node]:
+                    cost, path = calculate_cost(neighbor, visited.copy())
+                    total_cost = cost + self.weights.get((node, neighbor), 1)
 
-    def oracle_search(self, start: str, goal: str) -> List[str]:
-        """Oracle Search (Assumes perfect knowledge of shortest path)"""
-        return self.a_star(start, goal, use_heuristic=False)
+                    if total_cost < min_cost:
+                        min_cost = total_cost
+                        best_path = [node] + path
+
+                return min_cost, best_path
+        
+        _, path = calculate_cost(start, set())
+        return path if path else []
+
+    #strat -> A goal/destination -> G
+    def oracle(self, start: str, goal: str) -> List[str]:
+        """Oracle Search - Assumes perfect knowledge of the shortest path
+        Uses Dijkstra's algorithm since we have perfect knowledge"""
+        distances = {node: float('inf') for node in self.graph}
+        distances[start] = 0
+        predecessors = {node: None for node in self.graph}
+        pq = [(0, start)]
+        visited = set()
+
+        while pq:
+            current_distance, current_node = heapq.heappop(pq)
+
+            if current_node in visited:
+                continue
+
+            visited.add(current_node)
+
+            if current_node == goal:
+                break
+
+            for neighbor in self.graph[current_node]:
+                distance = current_distance + self.weights.get((current_node, neighbor), 1)
+                if distance < distances[neighbor]:
+                    distances[neighbor] = distance
+                    predecessors[neighbor] = current_node
+                    heapq.heappush(pq, (distance, neighbor))
+
+        ##Reconstruct path
+        path = []
+        current = goal
+        while current is not None:
+            path.append(current)
+            current = predecessors[current]
+        return list(reversed(path))
 
 
 def main():
@@ -197,11 +267,13 @@ def main():
         #('BFS', g.bfs),
         #('British Museum', g.british_museum_search),
         #('DFS', g.dfs),
-        ('Hill Climbing', g.hill_climbing),
+        #('Hill Climbing', g.hill_climbing),
         #('Branch & Bound', g.branch_and_bound),
         #('Oracle', g.oracle_search),
         #('Branch & Bound with Heuristic', g.branch_and_bound_with_heuristic),
         #('A*', g.a_star)
+        #('AO*', g.ao_star),
+        #('Oracle', g.oracle)
     ]
     
     
